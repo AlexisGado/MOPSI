@@ -86,24 +86,20 @@ void StereoImages::computeDisparity()
     }
 
     pair<int,int> minmaxL = range(dispMatrixL);
-    pair<int,int> minmaxR = range(dispMatrixL);
+    pair<int,int> minmaxR = range(dispMatrixR);
 
     int minL = minmaxL.first;
     int minR = minmaxR.first;
 
-    int maxL = minmaxL.second - minL;
-    int maxR = minmaxR.second - minR;
+    int maxL = minmaxL.second;
+    int maxR = minmaxR.second;
 
     for (int x=0; x<width; x++)
     {
         for (int y=0; y<height; y++)
         {
-            dispL(x,y) = byte(255*float((dispMatrixL(y,x)-minL))/float(maxL));
-            dispR(x,y) = byte(255*float((dispMatrixR(y,x)-minR))/float(maxR));
-
-            // if (255*float((dispMatrixR(y,x)-minR))/float(maxR)>255 || 255*float((dispMatrixR(y,x)-minR))/float(maxR)<0){
-            //     cout<<x<<" "<<y<<" "<<255*float((dispMatrixR(y,x)-minR))/float(maxR)<<endl;
-            // }
+            dispL(x,y) = byte(255*float((dispMatrixL(y,x)-minL))/float(maxL-minL));
+            dispR(x,y) = byte(255*float((dispMatrixR(y,x)-minR))/float(maxR-minR));
         }
     }
 }
