@@ -62,13 +62,14 @@ void StereoImages::addRowDisparityMaps(Matrix<int>& dispMapL, Matrix<int>& dispM
     {
         dispMapL(row, y) = x-y;
         dispMapR(row, x) = y-x;
+
+        if (y==0) {x--; continue;}
+        if (x==0) {y--; continue;}
         if (y>0) up = dpMat(x,y-1);
         if (x>0) left = dpMat(x-1,y);
         if (x>0 && y>0) upLeft = dpMat(x-1,y-1);
         minimum = min(up,min(left,upLeft));
 
-        if (y==0) {x--; continue;}
-        if (x==0) {y--; continue;}
         if (minimum == upLeft) {y--; x--; continue;} // Add a tolerance in the test if dpMat becomes a float matrix
         if (minimum == up) {y--; continue;}
         if (minimum == left) {x--; continue;}
@@ -97,9 +98,12 @@ void StereoImages::computeDisparity()
     {
         for (int y=0; y<height; y++)
         {
-            //cout<<"check "<<x<<" "<<y<<endl;
             dispL(x,y) = byte(255*float((dispMatrixL(y,x)-minL))/float(maxL));
             dispR(x,y) = byte(255*float((dispMatrixR(y,x)-minR))/float(maxR));
+
+            // if (255*float((dispMatrixR(y,x)-minR))/float(maxR)>255 || 255*float((dispMatrixR(y,x)-minR))/float(maxR)<0){
+            //     cout<<x<<" "<<y<<" "<<255*float((dispMatrixR(y,x)-minR))/float(maxR)<<endl;
+            // }
         }
     }
 }
