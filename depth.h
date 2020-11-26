@@ -7,10 +7,10 @@
 using namespace std;
 using namespace Imagine;
 
-class StereoImages
+template <typename T> class StereoImages
 {
-    Image<byte> imLeft, imRight;
-    Image<byte> dispL, dispR; 
+    Image<T> imLeft, imRight;
+    Image<byte> dispL, dispR;
     int width,height;
 public:
     StereoImages(string imL, string imR);

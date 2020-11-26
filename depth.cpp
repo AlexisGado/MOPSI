@@ -1,7 +1,8 @@
 #include "depth.h"
 
 
-StereoImages::StereoImages(string nameImL, string nameImR)
+template <typename T>
+StereoImages<T>::StereoImages(string nameImL, string nameImR)
 {
     if (!load(imLeft,srcPath("images")+string("/")+nameImL)) throw "Issue when loading the left image";
     if (!load(imRight,srcPath("images")+string("/")+nameImR)) throw "Issue when loading the right image";
@@ -13,12 +14,24 @@ StereoImages::StereoImages(string nameImL, string nameImR)
     dispR = Image<byte>(width,height);
 }
 
-int StereoImages::dif(int row, int colLeft, int colRight) const
+// Fonction de calcul générique (sous entendu pour < byte >)
+template <typename T>
+int StereoImages<T>::dif(int row, int colLeft, int colRight) const
 {
     return abs(imLeft(colLeft, row)-imRight(colRight, row));
 }
 
-void StereoImages::computeDPMatrix(Matrix<int>& dpMat, int row) const
+// Fonction de calcul pour les images en couleur
+template <>
+int StereoImages< RGB< byte >>::dif(int row, int colLeft, int colRight) const
+{   int diff = abs(imLeft(colLeft, row).r()-imRight(colRight, row).r());
+    diff += abs(imLeft(colLeft, row).g()-imRight(colRight, row).g());
+    diff += abs(imLeft(colLeft, row).b()-imRight(colRight, row).b());
+    return diff;
+}
+
+template <typename T>
+void StereoImages<T>::computeDPMatrix(Matrix<int>& dpMat, int row) const
 {
     //Note : dpMat is a square matrix width*width
 
@@ -42,7 +55,8 @@ void StereoImages::computeDPMatrix(Matrix<int>& dpMat, int row) const
     }
 }
 
-void StereoImages::addRowDisparityMaps(Matrix<int>& dispMapL, Matrix<int>& dispMapR, int row) const
+template <typename T>
+void StereoImages<T>::addRowDisparityMaps(Matrix<int>& dispMapL, Matrix<int>& dispMapR, int row) const
 {
     Matrix<int> dpMat(width,width);
     computeDPMatrix(dpMat, row);
@@ -76,7 +90,8 @@ void StereoImages::addRowDisparityMaps(Matrix<int>& dispMapL, Matrix<int>& dispM
     }
 }
 
-void StereoImages::computeDisparity()
+template <typename T>
+void StereoImages<T>::computeDisparity()
 {
     Matrix<int> dispMatrixL(height, width);
     Matrix<int> dispMatrixR(height, width);
@@ -102,9 +117,20 @@ void StereoImages::computeDisparity()
             dispR(x,y) = byte(255*float((dispMatrixR(y,x)-minR))/float(maxR-minR));
         }
     }
+    /*
+    DoublePoint3 * points = new DoublePoint3[width*height];
+    for (int x = 0; x < width; x++){
+        for (int y = 0; y < height; y++){
+            DoublePoint3 newPoint (x, y, dispL(x,y));
+            points[x + width*y] = newPoint;
+        }
+    }*/
+
+    //Mesh mesh = Mesh::PointCloud(points, width*height);
 }
 
-void StereoImages::displayAll() const
+template <typename T>
+void StereoImages<T>::displayAll() const
 {
     Window w1 = openWindow(width,height);
     setActiveWindow(w1);
@@ -129,3 +155,9 @@ void StereoImages::displayAll() const
     closeWindow(w3);
     closeWindow(w4);
 }
+
+
+template class StereoImages<byte>;
+template class StereoImages<Color>;
+//Indispensable de mettre ça dans le .cpp, car sinon on devrait mettre l'implémentation de la classe template dans le .h
+// Merci http://annabellecollin.perso.math.cnrs.fr/TPS/TP_4.pdf
