@@ -4,15 +4,13 @@ int main()
 {
     try
     {
+        cout << "Calcul de la carte de disparité d'images en noir et blanc";
         StereoImages<byte> statue("statueLeft.ppm","statueRight.ppm");
         statue.computeDisparity();
-        cout << "Affichage de la carte de disparité d'images en noir et blanc";
-        statue.displayAll();
         cout << "Calcul de la carte de disparité d'images en couleur";
         StereoImages<RGB<byte>> aloe("aloeL.png","aloeR.png");
+        statue.displayAll();
         aloe.computeDisparity();
-
-        click();
         aloe.displayAll();
     }
     catch (char const* err)
