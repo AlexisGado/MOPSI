@@ -92,7 +92,7 @@ void StereoImages<T>::addRowDisparityMaps(Matrix<int>& dispMapL, Matrix<int>& di
 
 template <typename T>
 void StereoImages<T>::computeDisparity()
-{
+{   clock_t t1 = clock();
     Matrix<int> dispMatrixL(height, width);
     Matrix<int> dispMatrixR(height, width);
     for (int row = 0; row<height; row++)
@@ -117,16 +117,8 @@ void StereoImages<T>::computeDisparity()
             dispR(x,y) = byte(255*float((dispMatrixR(y,x)-minR))/float(maxR-minR));
         }
     }
-    /*
-    DoublePoint3 * points = new DoublePoint3[width*height];
-    for (int x = 0; x < width; x++){
-        for (int y = 0; y < height; y++){
-            DoublePoint3 newPoint (x, y, dispL(x,y));
-            points[x + width*y] = newPoint;
-        }
-    }*/
-
-    //Mesh mesh = Mesh::PointCloud(points, width*height);
+    clock_t t2 = clock();
+    cout << "Temps de calcul : " << (t2-t1) / float(CLOCKS_PER_SEC) << " secondes." << endl;
 }
 
 template <typename T>
@@ -147,6 +139,17 @@ void StereoImages<T>::displayAll() const
     Window w4 = openWindow(width,height);
     setActiveWindow(w4);
     display(dispR);
+
+    /*
+    DoublePoint3 * points = new DoublePoint3[width*height];
+    for (int x = 0; x < width; x++){
+        for (int y = 0; y < height; y++){
+            DoublePoint3 newPoint (x, y, dispL(x,y));
+            points[x + width*y] = newPoint;
+        }
+    }*/
+
+    //Mesh mesh = Mesh::PointCloud(points, width*height);
 
     anyClick();
 

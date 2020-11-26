@@ -3,6 +3,7 @@
 #include <Imagine/LinAlg.h>
 #include <Imagine/Graphics.h>
 #include <math.h>
+#include <time.h>
 
 using namespace std;
 using namespace Imagine;
