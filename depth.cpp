@@ -1,8 +1,22 @@
 #include "depth.h"
 
+namespace global {
+    const float SMOOTHING_THRESHOLD1 = 4.;
+    const float SMOOTHING_THRESHOLD2 = 2;
+    const float PATH_VALUE = 1;
+}
+float smoothing_function(const float & current_difference_value, const float & former_difference_value){
+    if (abs(current_difference_value - former_difference_value) > global::SMOOTHING_THRESHOLD1){
+        return current_difference_value;
+    }
+    if (abs(current_difference_value - former_difference_value) > global::SMOOTHING_THRESHOLD2){
+        return (current_difference_value + former_difference_value)/2;
+    }
+    return former_difference_value;
+}
 
 template <typename T>
-StereoImages<T>::StereoImages(string nameImL, string nameImR)
+StereoImages<T>::StereoImages(string nameImL, string nameImR, bool reusing_path0, bool smoothing0)
 {
     if (!load(imLeft,srcPath("images")+string("/")+nameImL)) throw "Issue when loading the left image";
     if (!load(imRight,srcPath("images")+string("/")+nameImR)) throw "Issue when loading the right image";
@@ -12,6 +26,9 @@ StereoImages<T>::StereoImages(string nameImL, string nameImR)
 
     dispL = Image<byte>(width,height);
     dispR = Image<byte>(width,height);
+
+    smoothing = smoothing0;
+    reusing_path = reusing_path0;
 }
 
 // Fonction de calcul générique (sous entendu pour < byte >)
@@ -31,7 +48,7 @@ int StereoImages< RGB< byte >>::dif(int row, int colLeft, int colRight) const
 }
 
 template <typename T>
-void StereoImages<T>::computeDPMatrix(Matrix<float>& dpMat, int row, Matrix<float> & path) const
+void StereoImages<T>::computeDPMatrix(Matrix<float>& dpMat, int row, Matrix<float> & path, Matrix<float> & smooth) const
 {
     //Note : dpMat is a square matrix width*width
 
@@ -49,22 +66,29 @@ void StereoImages<T>::computeDPMatrix(Matrix<float>& dpMat, int row, Matrix<floa
     for (int y = 1; y<width; y++)
     {
         for (int x = 1; x<width; x++)
-        {
-            dpMat(y,x) = min(dpMat(y-1,x-1),min(dpMat(y,x-1),dpMat(y-1,x))) + dif(row,y,x) - path(y, x);
-            path(y, x) = path(y, x) * 0.6;
+        {   float difference = dif(row,y,x) + 1;
+            if(smoothing){
+                difference = smoothing_function(difference + 1,smooth(y, x));
+                smooth(y, x) = difference;
+            }
+            float dp = min(dpMat(y-1,x-1),min(dpMat(y,x-1),dpMat(y-1,x))) + difference;
+            if(reusing_path){
+                dp -= path(y, x);
+                path(y, x) = path(y, x) * float(0.6);
+            }
+            dpMat(y,x) = dp ;
         }
     }
 }
 
 template <typename T>
-void StereoImages<T>::addRowDisparityMaps(Matrix<int>& dispMapL, Matrix<int>& dispMapR, int row, Matrix<float> & path) const
+void StereoImages<T>::addRowDisparityMaps(Matrix<int>& dispMapL, Matrix<int>& dispMapR, int row, Matrix<float> & path, Matrix<float> & smooth) const
 {
     Matrix<float> dpMat(width,width);
-    computeDPMatrix(dpMat, row, path);
+    computeDPMatrix(dpMat, row, path, smooth);
 
     int x = width-1;
     int y = width-1;
-    const float PATH_VALUE = 1;
 
     float up = 0;
     float left = 0;
@@ -78,8 +102,9 @@ void StereoImages<T>::addRowDisparityMaps(Matrix<int>& dispMapL, Matrix<int>& di
     {
         dispMapL(row, y) = x-y;
         dispMapR(row, x) = y-x;
-        path(y, x) = (PATH_VALUE + path(y, x))/2 ;
-
+        if(reusing_path){
+            path(y, x) = (global::PATH_VALUE + path(y, x))/2 ;
+        }
         if (y==0) {x--; continue;}
         if (x==0) {y--; continue;}
         if (y>0) up = dpMat(x,y-1);
@@ -99,17 +124,19 @@ void StereoImages<T>::computeDisparity()
     Matrix<int> dispMatrixL(height, width);
     Matrix<int> dispMatrixR(height, width);
     Matrix<float> path(width, width);
+    Matrix<float> smooth(width, width);
     for (int x = 0; x<width; x++)
     {
         for (int y = 0; y<width; y++)
         {
             path(y, x) = 0;
+            smooth(y, x) = 0;
         }
     }
 
     for (int row = 0; row<height; row++)
     {
-        addRowDisparityMaps(dispMatrixL, dispMatrixR, row, path);
+        addRowDisparityMaps(dispMatrixL, dispMatrixR, row, path, smooth);
     }
 
     pair<int,int> minmaxL = range(dispMatrixL);
@@ -136,19 +163,33 @@ void StereoImages<T>::computeDisparity()
 template <typename T>
 void StereoImages<T>::displayAll() const
 {
-    Window w1 = openWindow(width,height);
+    Window w1 = openWindow(width,height, "Left Image");
     setActiveWindow(w1);
     display(imLeft);
 
-    Window w2 = openWindow(width,height);
+    Window w2 = openWindow(width,height, "Right Image");
     setActiveWindow(w2);
     display(imRight);
 
-    Window w3 = openWindow(width,height);
+
+    string strL = "Left disparity map";
+    string strR = "Right disparity map" ;
+    if(reusing_path){
+        strL += ", Reusing paths";
+        strR += ", Reusing paths";
+    }
+    if(smoothing){
+        strL += ", Smoothing";
+        strR += ", Smoothing";
+    }
+
+
+    Window w3 = openWindow(width,height, strL);
     setActiveWindow(w3);
     display(dispL);
 
-    Window w4 = openWindow(width,height);
+
+    Window w4 = openWindow(width,height, strR);
     setActiveWindow(w4);
     display(dispR);
 

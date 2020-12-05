@@ -4,7 +4,7 @@ int main()
 {
     try
     {
-        StereoImages<byte> statue("statueLeft.ppm","statueRight.ppm");
+        StereoImages<byte> statue("statueLeft.ppm","statueRight.ppm", false, true);
         cout << "Calculs en cours..." << endl;
         statue.computeDisparity();
         //StereoImages<RGB<byte>> aloe("aloeL.png","aloeR.png");
