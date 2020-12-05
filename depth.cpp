@@ -31,7 +31,7 @@ int StereoImages< RGB< byte >>::dif(int row, int colLeft, int colRight) const
 }
 
 template <typename T>
-void StereoImages<T>::computeDPMatrix(Matrix<int>& dpMat, int row) const
+void StereoImages<T>::computeDPMatrix(Matrix<float>& dpMat, int row, Matrix<float> & path) const
 {
     //Note : dpMat is a square matrix width*width
 
@@ -50,24 +50,26 @@ void StereoImages<T>::computeDPMatrix(Matrix<int>& dpMat, int row) const
     {
         for (int x = 1; x<width; x++)
         {
-            dpMat(y,x) = min(dpMat(y-1,x-1),min(dpMat(y,x-1),dpMat(y-1,x))) + dif(row,y,x);
+            dpMat(y,x) = min(dpMat(y-1,x-1),min(dpMat(y,x-1),dpMat(y-1,x))) + dif(row,y,x) - path(y, x);
+            path(y, x) = path(y, x) * 0.6;
         }
     }
 }
 
 template <typename T>
-void StereoImages<T>::addRowDisparityMaps(Matrix<int>& dispMapL, Matrix<int>& dispMapR, int row) const
+void StereoImages<T>::addRowDisparityMaps(Matrix<int>& dispMapL, Matrix<int>& dispMapR, int row, Matrix<float> & path) const
 {
-    Matrix<int> dpMat(width,width);
-    computeDPMatrix(dpMat, row);
+    Matrix<float> dpMat(width,width);
+    computeDPMatrix(dpMat, row, path);
 
     int x = width-1;
     int y = width-1;
+    const float PATH_VALUE = 1;
 
-    int up = 0;
-    int left = 0;
-    int upLeft = 0;
-    int minimum = 0;
+    float up = 0;
+    float left = 0;
+    float upLeft = 0;
+    float minimum = 0;
 
     dispMapL(row, 0) = 0;
     dispMapR(row, 0) = 0;
@@ -76,6 +78,7 @@ void StereoImages<T>::addRowDisparityMaps(Matrix<int>& dispMapL, Matrix<int>& di
     {
         dispMapL(row, y) = x-y;
         dispMapR(row, x) = y-x;
+        path(y, x) = (PATH_VALUE + path(y, x))/2 ;
 
         if (y==0) {x--; continue;}
         if (x==0) {y--; continue;}
@@ -95,9 +98,18 @@ void StereoImages<T>::computeDisparity()
 {   clock_t t1 = clock();
     Matrix<int> dispMatrixL(height, width);
     Matrix<int> dispMatrixR(height, width);
+    Matrix<float> path(width, width);
+    for (int x = 0; x<width; x++)
+    {
+        for (int y = 0; y<width; y++)
+        {
+            path(y, x) = 0;
+        }
+    }
+
     for (int row = 0; row<height; row++)
     {
-        addRowDisparityMaps(dispMatrixL, dispMatrixR, row);
+        addRowDisparityMaps(dispMatrixL, dispMatrixR, row, path);
     }
 
     pair<int,int> minmaxL = range(dispMatrixL);
@@ -140,8 +152,8 @@ void StereoImages<T>::displayAll() const
     setActiveWindow(w4);
     display(dispR);
 
-    /*
-    DoublePoint3 * points = new DoublePoint3[width*height];
+
+    /*DoublePoint3 * points = new DoublePoint3[width*height];
     for (int x = 0; x < width; x++){
         for (int y = 0; y < height; y++){
             DoublePoint3 newPoint (x, y, dispL(x,y));
@@ -163,4 +175,4 @@ void StereoImages<T>::displayAll() const
 template class StereoImages<byte>;
 template class StereoImages<Color>;
 //Indispensable de mettre ça dans le .cpp, car sinon on devrait mettre l'implémentation de la classe template dans le .h
-// Merci http://annabellecollin.perso.math.cnrs.fr/TPS/TP_4.pdf
+//cf http://annabellecollin.perso.math.cnrs.fr/TPS/TP_4.pdf
