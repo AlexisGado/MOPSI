@@ -136,6 +136,7 @@ void StereoImages<T>::computeDisparity()
 
     for (int row = 0; row<height; row++)
     {
+        //cout<<"Row "<<row<<" done."<<endl;
         addRowDisparityMaps(dispMatrixL, dispMatrixR, row, path, smooth);
     }
 
@@ -194,17 +195,57 @@ void StereoImages<T>::displayAll() const
     display(dispR);
 
 
-    /*DoublePoint3 * points = new DoublePoint3[width*height];
-    for (int x = 0; x < width; x++){
-        for (int y = 0; y < height; y++){
-            DoublePoint3 newPoint (x, y, dispL(x,y));
-            points[x + width*y] = newPoint;
-        }
-    }*/
+    // DoublePoint3 * points = new DoublePoint3[width*height];
+    // for (int x = 0; x < width; x++){
+    //     for (int y = 0; y < height; y++){
+    //         DoublePoint3 newPoint (x, y, dispL(x,y));
+    //         points[x + width*y] = newPoint;
+    //     }
+    // }
 
-    //Mesh mesh = Mesh::PointCloud(points, width*height);
+    // Quad * quads = new Quad[(width-1)*(height-1)];
+    // for (int x = 0; x < width-1; x++){
+    //     for (int y = 0; y < height-1; y++){
+    //         Quad quad (x+width*y, x+1+width*y, x+1+width*(y+1), x+width*(y+1));
+    //         quads[x + (width-1)*y] = quad;
+    //     }
+    // }
 
-    anyClick();
+    // Mesh mesh(points, width*height, 0, 0, quads, (width-1)*(height-1));
+
+    // mesh.setColor(WHITE);
+
+    // Window w5 = openWindow3D(width,height,"3D representation");
+    // setActiveWindow(w5);
+
+    // showMesh(mesh);
+
+
+
+
+
+
+    // DoublePoint3 pos(width,height/2,0);
+    // DoubleVector3 dir(1,0,0);
+    // DoubleVector3 up(0,-1,0);
+    // float theta = 0;
+
+    // for (int i=0; i<200; i++)
+    // {
+    //     theta = M_PI*i/200;
+    //     DoublePoint3 pos(-sin(theta/2)*width+cos(theta/2)*2*width,height/2,-width*sin(theta));
+    //     DoubleVector3 dir(cos(theta),0,-sin(theta));
+    //     setCamera(pos,dir,up);
+    //     milliSleep(300);
+    // }
+    
+    // DoublePoint3 pos(width/2,height/2,1150);
+    // DoubleVector3 dir(0,0,1);
+    // DoubleVector3 up(0,-1,0);
+    // setCamera(pos,dir,up);
+
+    setActiveWindow(w1);
+    click();
 
     closeWindow(w1);
     closeWindow(w2);
