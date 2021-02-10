@@ -13,6 +13,7 @@ template <typename T> class StereoImages
     Image<T> imLeft, imRight;
     Image<byte> dispL, dispR;
     int width,height;
+    int ecart;
     bool reusing_path, smoothing;
 public:
     StereoImages(string imL, string imR, bool reusing_path0 = true, bool smoothing0 = true);

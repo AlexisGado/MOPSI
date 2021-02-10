@@ -4,6 +4,7 @@ namespace global {
     const float SMOOTHING_THRESHOLD1 = 4.;
     const float SMOOTHING_THRESHOLD2 = 2;
     const float PATH_VALUE = 1;
+    const float PROPORTION_VALUE = 5;
 }
 float smoothing_function(const float & current_difference_value, const float & former_difference_value){
     if (abs(current_difference_value - former_difference_value) > global::SMOOTHING_THRESHOLD1){
@@ -23,6 +24,7 @@ StereoImages<T>::StereoImages(string nameImL, string nameImR, bool reusing_path0
 
     width = imLeft.width();
     height = imLeft.height();
+    ecart = int(width/global::PROPORTION_VALUE);
 
     dispL = Image<byte>(width,height);
     dispR = Image<byte>(width,height);
@@ -52,7 +54,18 @@ void StereoImages<T>::computeDPMatrix(Matrix<float>& dpMat, int row, Matrix<floa
 {
     //Note : dpMat is a square matrix width*width
 
+
+    for (int x = 0; x<width; x++)
+    {
+        for (int y = 0; y< width; y++)
+        {
+            dpMat(y,x) = 1000000 ;
+        }
+    }
+
     dpMat(0,0) = 0;
+    float maxi = 0;
+    //Pour étude des valeurs de la matrice de programmation dynamique
 
     for (int x = 1; x<width; x++)
     {
@@ -63,22 +76,35 @@ void StereoImages<T>::computeDPMatrix(Matrix<float>& dpMat, int row, Matrix<floa
         dpMat(y,0) = dpMat(y-1,0) + dif(row,y,0);
     }
 
-    for (int y = 1; y<width; y++)
+
+    for (int x = 1; x<width; x++)
     {
-        for (int x = 1; x<width; x++)
-        {   float difference = dif(row,y,x) + 1;
+        /*if (x-ecart_max-1 > 1){
+            dpMat(x-ecart_max-1,x) = dif(row,x-ecart_max-1,x) + min(dpMat(x-ecart_max-2,x-1),dpMat(x-ecart_max-1,x-1)) ;
+        }*/
+        for (int y = max(1, x-ecart); y< min(width, x+ecart-1); y++)
+        {   //float difference = dif(row,y,x) + 1;
+            float difference = dif(row,y,x);
             if(smoothing){
                 difference = smoothing_function(difference + 1,smooth(y, x));
                 smooth(y, x) = difference;
             }
-            float dp = min(dpMat(y-1,x-1),min(dpMat(y,x-1),dpMat(y-1,x))) + difference;
+            float up = dpMat(y,x-1);
+            float left = dpMat(y-1,x);
+            float dp = min(dpMat(y-1,x-1), min(up,left)) + difference;
             if(reusing_path){
                 dp -= path(y, x);
                 path(y, x) = path(y, x) * float(0.6);
             }
             dpMat(y,x) = dp ;
+            if (dp > maxi) {maxi = dp;}
         }
+        /*if ((x > 1) && (x + ecart_max < width)){
+            dpMat(x + ecart_max,x) = dif(row,x+ecart_max,x) + min(dpMat(x-ecart_max-1,x-1),dpMat(x-ecart_max-1,x)) ;
+        }*/
     }
+    //if (maxi >  33812)cout << "Maxi " << maxi << endl;
+    cout << "Maxi " << maxi << endl;
 }
 
 template <typename T>
@@ -86,6 +112,23 @@ void StereoImages<T>::addRowDisparityMaps(Matrix<int>& dispMapL, Matrix<int>& di
 {
     Matrix<float> dpMat(width,width);
     computeDPMatrix(dpMat, row, path, smooth);
+
+    //Pour la visualisation d'une matrice de programmation dynamique
+    Image<byte> byte_dpMat(width,width);
+    if (row ==10){
+
+        pair<int,int> minmaxL = range(dpMat);
+        int minL = minmaxL.first;
+
+        int maxL = minmaxL.second;
+        for (int x=0; x<width; x++)
+        {
+            for (int y=0; y<width; y++)
+            {
+                byte_dpMat(x,y) = byte(255*float((dpMat(y,x)-minL))/float(maxL-minL));
+            }
+        }
+    }
 
     int x = width-1;
     int y = width-1;
@@ -98,8 +141,10 @@ void StereoImages<T>::addRowDisparityMaps(Matrix<int>& dispMapL, Matrix<int>& di
     dispMapL(row, 0) = 0;
     dispMapR(row, 0) = 0;
 
+    float max_minimum = dpMat(x-1,y-1);
     while (x!=0 || y!=0)
     {
+        byte_dpMat(y,x) = 255;
         dispMapL(row, y) = x-y;
         dispMapR(row, x) = y-x;
         if(reusing_path){
@@ -111,11 +156,18 @@ void StereoImages<T>::addRowDisparityMaps(Matrix<int>& dispMapL, Matrix<int>& di
         if (x>0) left = dpMat(x-1,y);
         if (x>0 && y>0) upLeft = dpMat(x-1,y-1);
         minimum = min(up,min(left,upLeft));
-
+        if (minimum > max_minimum) {max_minimum = minimum;}
         if (minimum == upLeft) {y--; x--; continue;} // Add a tolerance in the test if dpMat becomes a float matrix
         if (minimum == up) {y--; continue;}
         if (minimum == left) {x--; continue;}
     }
+    if (row ==10){
+        Window w5 = openWindow(width,width, "byte_dpMat");
+        setActiveWindow(w5);
+        display(byte_dpMat);
+    }
+    if (max_minimum > 26042) cout << "Max du minimum " << max_minimum << endl;
+    //cout << "Max du minimum " << max_minimum << endl;
 }
 
 template <typename T>
@@ -244,7 +296,7 @@ void StereoImages<T>::displayAll() const
     // DoubleVector3 up(0,-1,0);
     // setCamera(pos,dir,up);
 
-    setActiveWindow(w1);
+    setActiveWindow(w4);
     click();
 
     closeWindow(w1);
