@@ -4,7 +4,8 @@ namespace global {
     const float SMOOTHING_THRESHOLD1 = 4.;
     const float SMOOTHING_THRESHOLD2 = 2;
     const float PATH_VALUE = 1;
-    const float PROPORTION_VALUE = 5;
+    const float PROPORTION_VALUE = 8;
+    const float TOL = 0.05;
 }
 float smoothing_function(const float & current_difference_value, const float & former_difference_value){
     if (abs(current_difference_value - former_difference_value) > global::SMOOTHING_THRESHOLD1){
@@ -28,6 +29,9 @@ StereoImages<T>::StereoImages(string nameImL, string nameImR, bool reusing_path0
 
     dispL = Image<byte>(width,height);
     dispR = Image<byte>(width,height);
+
+    dispMatrixL = Matrix<int>(height, width);
+    dispMatrixR = Matrix<int>(height, width);
 
     smoothing = smoothing0;
     reusing_path = reusing_path0;
@@ -104,18 +108,18 @@ void StereoImages<T>::computeDPMatrix(Matrix<float>& dpMat, int row, Matrix<floa
         }*/
     }
     //if (maxi >  33812)cout << "Maxi " << maxi << endl;
-    cout << "Maxi " << maxi << endl;
+    //cout << "Maxi " << maxi << endl;
 }
 
 template <typename T>
-void StereoImages<T>::addRowDisparityMaps(Matrix<int>& dispMapL, Matrix<int>& dispMapR, int row, Matrix<float> & path, Matrix<float> & smooth) const
+void StereoImages<T>::addRowDisparityMaps(int row, Matrix<float> & path, Matrix<float> & smooth)
 {
     Matrix<float> dpMat(width,width);
     computeDPMatrix(dpMat, row, path, smooth);
 
     //Pour la visualisation d'une matrice de programmation dynamique
     Image<byte> byte_dpMat(width,width);
-    if (row ==10){
+    if (row ==150){
 
         pair<int,int> minmaxL = range(dpMat);
         int minL = minmaxL.first;
@@ -138,15 +142,15 @@ void StereoImages<T>::addRowDisparityMaps(Matrix<int>& dispMapL, Matrix<int>& di
     float upLeft = 0;
     float minimum = 0;
 
-    dispMapL(row, 0) = 0;
-    dispMapR(row, 0) = 0;
+    dispMatrixL(row, 0) = 0;
+    dispMatrixR(row, 0) = 0;
 
     float max_minimum = dpMat(x-1,y-1);
     while (x!=0 || y!=0)
     {
         byte_dpMat(y,x) = 255;
-        dispMapL(row, y) = x-y;
-        dispMapR(row, x) = y-x;
+        dispMatrixL(row, y) = x-y;
+        dispMatrixR(row, x) = y-x;
         if(reusing_path){
             path(y, x) = (global::PATH_VALUE + path(y, x))/2 ;
         }
@@ -161,20 +165,21 @@ void StereoImages<T>::addRowDisparityMaps(Matrix<int>& dispMapL, Matrix<int>& di
         if (minimum == up) {y--; continue;}
         if (minimum == left) {x--; continue;}
     }
-    if (row ==10){
+    if (row ==150){
         Window w5 = openWindow(width,width, "byte_dpMat");
         setActiveWindow(w5);
+        clearWindow();
         display(byte_dpMat);
     }
-    if (max_minimum > 26042) cout << "Max du minimum " << max_minimum << endl;
+    //if (max_minimum > 26042) cout << "Max du minimum " << max_minimum << endl;
     //cout << "Max du minimum " << max_minimum << endl;
 }
 
 template <typename T>
 void StereoImages<T>::computeDisparity()
 {   clock_t t1 = clock();
-    Matrix<int> dispMatrixL(height, width);
-    Matrix<int> dispMatrixR(height, width);
+    Matrix<double> invDispMatrixL(height, width);
+    Matrix<double> invDispMatrixR(height, width);
     Matrix<float> path(width, width);
     Matrix<float> smooth(width, width);
     for (int x = 0; x<width; x++)
@@ -189,11 +194,21 @@ void StereoImages<T>::computeDisparity()
     for (int row = 0; row<height; row++)
     {
         //cout<<"Row "<<row<<" done."<<endl;
-        addRowDisparityMaps(dispMatrixL, dispMatrixR, row, path, smooth);
+        addRowDisparityMaps(row, path, smooth);
     }
 
-    pair<int,int> minmaxL = range(dispMatrixL);
-    pair<int,int> minmaxR = range(dispMatrixR);
+    for (int x=0; x<width; x++)
+    {
+        for (int y=0; y<height; y++)
+        {
+            invDispMatrixL(y,x) = min(30,abs(1000/dispMatrixL(y,x)));
+            invDispMatrixR(y,x) = min(30,abs(1000/dispMatrixR(y,x)));
+        }
+    }
+
+
+    pair<int,int> minmaxL = range(invDispMatrixL);
+    pair<int,int> minmaxR = range(invDispMatrixR);
 
     int minL = minmaxL.first;
     int minR = minmaxR.first;
@@ -205,8 +220,10 @@ void StereoImages<T>::computeDisparity()
     {
         for (int y=0; y<height; y++)
         {
-            dispL(x,y) = byte(255*float((dispMatrixL(y,x)-minL))/float(maxL-minL));
-            dispR(x,y) = byte(255*float((dispMatrixR(y,x)-minR))/float(maxR-minR));
+            dispL(x,y) = byte(255*float((maxL-invDispMatrixL(y,x)))/float(maxL-minL));
+            dispR(x,y) = byte(255*float((maxR-invDispMatrixR(y,x)))/float(maxR-minR));
+            // dispL(x,y) = byte(255 - float(invDispMatrixL(y,x)*255)/float(maxL));
+            // dispR(x,y) = byte(255 - float(invDispMatrixR(y,x)*255)/float(maxR));
         }
     }
     clock_t t2 = clock();
@@ -250,7 +267,7 @@ void StereoImages<T>::displayAll() const
     // DoublePoint3 * points = new DoublePoint3[width*height];
     // for (int x = 0; x < width; x++){
     //     for (int y = 0; y < height; y++){
-    //         DoublePoint3 newPoint (x, y, dispL(x,y));
+    //         DoublePoint3 newPoint (x, y, min(150,abs(1000/dispMatrixL(y,x))));
     //         points[x + width*y] = newPoint;
     //     }
     // }
@@ -305,6 +322,27 @@ void StereoImages<T>::displayAll() const
     closeWindow(w4);
 }
 
+template <typename T>
+void StereoImages<T>::computeScore(string namegtL, string namegtR) const
+{
+    Image<byte> gtL, gtR;
+    if (!load(gtL,srcPath("images")+string("/")+namegtL)) throw "Issue when loading the left gt";
+
+    int correctsL = 0;
+    double tolPix = global::TOL*width;
+    for (int x=0; x<width; x++)
+    {
+        for (int y=0; y<height; y++)
+        {
+            if (abs(gtL(y,x)-dispMatrixL(y,x))<tolPix)
+            {
+                correctsL++;
+            }
+        }
+    }
+
+    cout<<double(correctsL)/(width*height)<<endl;
+}
 
 template class StereoImages<byte>;
 template class StereoImages<Color>;
