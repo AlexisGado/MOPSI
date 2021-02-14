@@ -1,19 +1,15 @@
 #include "depth.h"
+//#include <omp.h>
 
 namespace global {
+    const float DENOISE_SCALE = 1;
+    const float DENOISE_WEIGHT = 1;
     const float SMOOTHING_THRESHOLD1 = 4.;
     const float SMOOTHING_THRESHOLD2 = 2;
+    const float PATH_SCALE = 0.6; //0.875 dans l'article
     const float PATH_VALUE = 1;
-    const float PROPORTION_VALUE = 5;
-}
-float smoothing_function(const float & current_difference_value, const float & former_difference_value){
-    if (abs(current_difference_value - former_difference_value) > global::SMOOTHING_THRESHOLD1){
-        return current_difference_value;
-    }
-    if (abs(current_difference_value - former_difference_value) > global::SMOOTHING_THRESHOLD2){
-        return (current_difference_value + former_difference_value)/2;
-    }
-    return former_difference_value;
+    const float SIZE_REDUCTION = 4;
+    const int ROW_DISPLAYED = 130;
 }
 
 template <typename T>
@@ -24,7 +20,7 @@ StereoImages<T>::StereoImages(string nameImL, string nameImR, bool reusing_path0
 
     width = imLeft.width();
     height = imLeft.height();
-    ecart = int(width/global::PROPORTION_VALUE);
+    ecart = int(width/global::SIZE_REDUCTION);
 
     dispL = Image<byte>(width,height);
     dispR = Image<byte>(width,height);
@@ -49,73 +45,141 @@ int StereoImages< RGB< byte >>::dif(int row, int colLeft, int colRight) const
     return diff;
 }
 
+float smoothingFunction(const float & current_difference_value, const float & former_difference_value){
+    if (abs(current_difference_value - former_difference_value) > global::SMOOTHING_THRESHOLD1){
+        return current_difference_value;
+    }
+    if (abs(current_difference_value - former_difference_value) > global::SMOOTHING_THRESHOLD2){
+        return (current_difference_value + former_difference_value)/2;
+    }
+    return former_difference_value;
+}
+
+
 template <typename T>
-void StereoImages<T>::computeDPMatrix(Matrix<float>& dpMat, int row, Matrix<float> & path, Matrix<float> & smooth) const
-{
-    //Note : dpMat is a square matrix width*width
+float StereoImages<T>::computeColorInput(const int & row, Matrix<float> & smooth, const int & x, const int & y) const
+{   //Difference
+    float colorInput = dif(row,y,x);
 
+    //Denoise
+    colorInput = global::DENOISE_SCALE * colorInput + global::DENOISE_WEIGHT;
 
-    for (int x = 0; x<width; x++)
-    {
-        for (int y = 0; y< width; y++)
-        {
-            dpMat(y,x) = 1000000 ;
-        }
+    //Smoothing
+    if(smoothing){
+        colorInput = smoothingFunction(colorInput, smooth(y, x));
+        smooth(y, x) = colorInput;
     }
+    return colorInput;
+}
 
-    dpMat(0,0) = 0;
-    float maxi = 0;
-    //Pour étude des valeurs de la matrice de programmation dynamique
-
-    for (int x = 1; x<width; x++)
-    {
-        dpMat(0,x) = dpMat(0,x-1) + dif(row,0,x);
-    }
-    for (int y = 1; y<width; y++)
-    {
-        dpMat(y,0) = dpMat(y-1,0) + dif(row,y,0);
-    }
-
-
-    for (int x = 1; x<width; x++)
-    {
-        /*if (x-ecart_max-1 > 1){
-            dpMat(x-ecart_max-1,x) = dif(row,x-ecart_max-1,x) + min(dpMat(x-ecart_max-2,x-1),dpMat(x-ecart_max-1,x-1)) ;
-        }*/
-        for (int y = max(1, x-ecart); y< min(width, x+ecart-1); y++)
-        {   //float difference = dif(row,y,x) + 1;
-            float difference = dif(row,y,x);
-            if(smoothing){
-                difference = smoothing_function(difference + 1,smooth(y, x));
-                smooth(y, x) = difference;
-            }
-            float up = dpMat(y,x-1);
-            float left = dpMat(y-1,x);
-            float dp = min(dpMat(y-1,x-1), min(up,left)) + difference;
-            if(reusing_path){
-                dp -= path(y, x);
-                path(y, x) = path(y, x) * float(0.6);
-            }
-            dpMat(y,x) = dp ;
-            if (dp > maxi) {maxi = dp;}
-        }
-        /*if ((x > 1) && (x + ecart_max < width)){
-            dpMat(x + ecart_max,x) = dif(row,x+ecart_max,x) + min(dpMat(x-ecart_max-1,x-1),dpMat(x-ecart_max-1,x)) ;
-        }*/
-    }
-    //if (maxi >  33812)cout << "Maxi " << maxi << endl;
-    cout << "Maxi " << maxi << endl;
+void reusingPaths(float & minimum, Matrix<float> & path, const int & x, const int & y){
+    minimum -= path(y, x);
+    path(y, x) = path(y, x) * global::PATH_SCALE;
 }
 
 template <typename T>
-void StereoImages<T>::addRowDisparityMaps(Matrix<int>& dispMapL, Matrix<int>& dispMapR, int row, Matrix<float> & path, Matrix<float> & smooth) const
+void StereoImages<T>::computeDPMatrix(Matrix<float>& dpMat, int row, Matrix<float> & path, Matrix<float> & smooth, bool fast) const
+{
+    //Note : dpMat is a square matrix width*width
+
+    if (fast){
+
+        for (int x = 0; x<width; x++)
+        {
+            for (int y = 0; y< width; y++)
+            {
+                dpMat(y,x) = 1000000 ;
+            }
+        }
+        dpMat(0,0) = 0;
+
+        for (int x = 1; x<width; x++)
+        {
+            dpMat(0,x) = dpMat(0,x-1) + dif(row,0,x);
+        }
+        for (int y = 1; y<width; y++)
+        {
+            dpMat(y,0) = dpMat(y-1,0) + dif(row,y,0);
+        }
+        for (int x = 1; x<width; x++)
+        {
+            if (x-ecart-1 > 1){
+                int y = x - ecart - 1;
+                float up = dpMat(y,x-1);
+                float minimum = min(dpMat(y-1,x-1), up);
+                if(reusing_path){
+                    reusingPaths(minimum, path, x, y);
+                }
+                dpMat(y,x) = computeColorInput(row, smooth, x, y) + minimum ;
+                if(row ==global::ROW_DISPLAYED){
+                    //cout << "ICI DP[" << x << ", " << y << "]= " << dpMat(y,x) << endl;
+                }
+            }
+            for (int y = max(1, x-ecart); y< min(width, x+ecart); y++){
+                float up = dpMat(y,x-1);
+                float left = dpMat(y-1,x);
+                float minimum = min(dpMat(y-1,x-1), min(up,left));
+                if(reusing_path){
+                    reusingPaths(minimum, path, x, y);
+                }
+                dpMat(y,x) = computeColorInput(row, smooth, x, y) + minimum ;
+                /*if(row == global::ROW_DISPLAYED){
+                    cout << "up = DP[" << x-1 << ", " << y << "]= " << up << endl;
+                    cout << "left = DP[" << x << ", " << y-1 << "]= " << left << endl;
+                    cout << "diag = DP[" << x-1 << ", " << y-1 << "]= " << dpMat(y-1,x-1) << endl;
+                    cout << "DP[" << x << ", " << y << "]= " << dpMat(y,x) << endl;
+                }*/
+            }
+            if (x + ecart < width){
+                int y = x + ecart;
+                float left = dpMat(y-1,x);
+                float minimum = min(dpMat(y-1,x-1), left);
+                if(reusing_path){
+                    reusingPaths(minimum, path, x, y);
+                }
+                dpMat(y,x) = computeColorInput(row, smooth, x, y) + minimum ;
+                /*if(row ==global::ROW_DISPLAYED){
+                    cout << "left = DP[" << x << ", " << y-1 << "]= " << left << endl;
+                    cout << "diag = DP[" << x-1 << ", " << y-1 << "]= " << dpMat(y-1,x-1) << endl;
+                    cout << "Là DP[" << x << ", " << y << "]= " << dpMat(y,x) << endl;
+                }*/
+            }
+        }
+    }
+
+    else{
+        dpMat(0,0) = 0;
+
+        for (int x = 1; x<width; x++)
+        {
+            dpMat(0,x) = dpMat(0,x-1) + dif(row,0,x);
+        }
+        for (int y = 1; y<width; y++)
+        {
+            dpMat(y,0) = dpMat(y-1,0) + dif(row,y,0);
+        }
+        for (int x = 1; x<width; x++){
+            for (int y = 1; y< width; y++){
+                float up = dpMat(y,x-1);
+                float left = dpMat(y-1,x);
+                float minimum = min(dpMat(y-1,x-1), min(up,left));
+                if(reusing_path){
+                    reusingPaths(minimum, path, x, y);
+                }
+                dpMat(y,x) = computeColorInput(row, smooth, x, y) + minimum ;
+            }
+        }
+    }
+}
+
+template <typename T>
+void StereoImages<T>::addRowDisparityMaps(Matrix<int>& dispMapL, Matrix<int>& dispMapR, int row, Matrix<float> & path, Matrix<float> & smooth, bool fast) const
 {
     Matrix<float> dpMat(width,width);
-    computeDPMatrix(dpMat, row, path, smooth);
+    computeDPMatrix(dpMat, row, path, smooth, fast);
 
-    //Pour la visualisation d'une matrice de programmation dynamique
     Image<byte> byte_dpMat(width,width);
-    if (row ==10){
+    if (row == global::ROW_DISPLAYED){
 
         pair<int,int> minmaxL = range(dpMat);
         int minL = minmaxL.first;
@@ -129,7 +193,6 @@ void StereoImages<T>::addRowDisparityMaps(Matrix<int>& dispMapL, Matrix<int>& di
             }
         }
     }
-
     int x = width-1;
     int y = width-1;
 
@@ -161,7 +224,7 @@ void StereoImages<T>::addRowDisparityMaps(Matrix<int>& dispMapL, Matrix<int>& di
         if (minimum == up) {y--; continue;}
         if (minimum == left) {x--; continue;}
     }
-    if (row ==10){
+    if (row == global::ROW_DISPLAYED){
         Window w5 = openWindow(width,width, "byte_dpMat");
         setActiveWindow(w5);
         display(byte_dpMat);
@@ -171,7 +234,7 @@ void StereoImages<T>::addRowDisparityMaps(Matrix<int>& dispMapL, Matrix<int>& di
 }
 
 template <typename T>
-void StereoImages<T>::computeDisparity()
+void StereoImages<T>::computeDisparity(bool fast)
 {   clock_t t1 = clock();
     Matrix<int> dispMatrixL(height, width);
     Matrix<int> dispMatrixR(height, width);
@@ -188,8 +251,7 @@ void StereoImages<T>::computeDisparity()
 
     for (int row = 0; row<height; row++)
     {
-        //cout<<"Row "<<row<<" done."<<endl;
-        addRowDisparityMaps(dispMatrixL, dispMatrixR, row, path, smooth);
+        addRowDisparityMaps(dispMatrixL, dispMatrixR, row, path, smooth, fast);
     }
 
     pair<int,int> minmaxL = range(dispMatrixL);
@@ -210,6 +272,20 @@ void StereoImages<T>::computeDisparity()
         }
     }
     clock_t t2 = clock();
+    string param;
+    if(fast){
+        param = "Fast speed";
+    }
+    else{
+        param = "Basic speed";
+    }
+    if(reusing_path){
+        param += ", Reusing paths";
+    }
+    if(smoothing){
+        param += ", Smoothing";
+    }
+    cout << "Paramètres de calcul : " << param << endl;
     cout << "Temps de calcul : " << (t2-t1) / float(CLOCKS_PER_SEC) << " secondes." << endl;
 }
 
