@@ -12,6 +12,7 @@ template <typename T> class StereoImages
 {
     Image<T> imLeft, imRight;
     Image<byte> dispL, dispR;
+    Matrix<int> dispMatrixL,dispMatrixR;
     int width,height;
     int ecart;
     bool reusing_path, smoothing;
@@ -20,7 +21,8 @@ public:
     float computeColorInput(const int & row, Matrix<float> & smooth, const int & x, const int & y) const;
     void computeDPMatrix(Matrix<float>& dpMat, int row, Matrix<float> & path, Matrix<float> & smooth, bool fast) const;
     int dif(int row, int colLeft, int colRight) const;
-    void addRowDisparityMaps(Matrix<int>& dispMapL, Matrix<int>& dispMapR, int row, Matrix<float> & path, Matrix<float> & smooth, bool fast) const;
+    void addRowDisparityMaps(int row, Matrix<float> & path, Matrix<float> & smooth, bool fast);
     void computeDisparity(bool fast = false);
     void displayAll() const;
+    void computeScore(string namegtL, string namegtR) const;
 };
